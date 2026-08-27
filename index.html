@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sound Garden</title>
+<style>
+  :root {
+    --bg-top: #0b1220;
+    --bg-bottom: #061018;
+    --panel-bg: rgba(10, 20, 30, 0.55);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --text: #e8f0f2;
+    --text-dim: rgba(232, 240, 242, 0.55);
+    --accent: #7ee8c9;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 0%, var(--bg-top), var(--bg-bottom));
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  canvas {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .panel {
+    position: absolute;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 10px 16px;
+    z-index: 10;
+  }
+  #topbar {
+    top: 16px;
+    left: 16px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    flex-wrap: wrap;
+  }
+  #topbar h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    margin: 0;
+    color: var(--accent);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .control input[type=range] {
+    width: 90px;
+    accent-color: var(--accent);
+  }
+  select {
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 3px 6px;
+    font-size: 12px;
+  }
+  button {
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  button:hover { background: rgba(255,255,255,0.14); }
+  button.active { background: var(--accent); color: #0a1a15; border-color: var(--accent); }
+  #spacer { flex: 1; }
+
+  #palette {
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .species-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid transparent;
+  }
+  .species-btn .dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+  }
+  .species-btn.selected {
+    border-color: rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.12);
+  }
+  .species-btn span.label { font-size: 11px; color: var(--text-dim); }
+
+  #hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    font-size: 15px;
+    color: var(--text-dim);
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+    z-index: 5;
+    max-width: 320px;
+    line-height: 1.6;
+  }
+  #hint b { color: var(--text); }
+
+  #helpBtn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 11;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="garden"></canvas>
+
+<div id="hint">
+  <b>Click the grid</b> to plant a seed.<br>
+  Click a seed again to remove it.<br>
+  Pick a species below, then let it grow.
+</div>
+
+<div class="panel" id="topbar">
+  <h1>🌱 Sound Garden</h1>
+  <div class="control">
+    <label for="tempo">Tempo</label>
+    <input type="range" id="tempo" min="60" max="160" value="100">
+    <span id="tempoVal">100</span>
+  </div>
+  <div class="control">
+    <label for="scale">Scale</label>
+    <select id="scale">
+      <option value="majPent" selected>Major Pentatonic</option>
+      <option value="minPent">Minor Pentatonic</option>
+      <option value="major">Major</option>
+      <option value="minor">Natural Minor</option>
+    </select>
+  </div>
+  <div class="control">
+    <label for="volume">Volume</label>
+    <input type="range" id="volume" min="0" max="1" step="0.01" value="0.6">
+  </div>
+  <div id="spacer"></div>
+  <button id="muteBtn">Mute</button>
+  <button id="clearBtn">Clear</button>
+</div>
+
+<button id="helpBtn" title="Show help">?</button>
+
+<div class="panel" id="palette"></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('garden');
+  const ctx = canvas.getContext('2d');
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0;
+
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Music theory ----------
+  const SCALES = {
+    majPent: [0, 2, 4, 7, 9],
+    minPent: [0, 3, 5, 7, 10],
+    major:   [0, 2, 4, 5, 7, 9, 11],
+    minor:   [0, 2, 3, 5, 7, 8, 10],
+  };
+  const BASE_FREQ = 130.81; // C3
+  const ROWS = 12;
+  const COLS = 16;
+
+  function noteFreq(rowFromBottom, scaleName) {
+    const scale = SCALES[scaleName];
+    const degree = rowFromBottom % scale.length;
+    const octave = Math.floor(rowFromBottom / scale.length);
+    const semitone = scale[degree] + octave * 12;
+    return BASE_FREQ * Math.pow(2, semitone / 12);
+  }
+
+  // ---------- Species (timbres) ----------
+  const SPECIES = [
+    { id: 'bell',  label: 'Bell',  wave: 'sine',     attack: 0.01,  decay: 0.9,  peak: 0.32, filterFreq: 4200, hue: 340, detune: 0 },
+    { id: 'pluck', label: 'Pluck', wave: 'triangle', attack: 0.004, decay: 0.35, peak: 0.4,  filterFreq: 3200, hue: 150, detune: 0 },
+    { id: 'bloom', label: 'Bloom', wave: 'sine',     attack: 0.03,  decay: 1.3,  peak: 0.26, filterFreq: 2200, hue: 265, detune: 6 },
+    { id: 'spark', label: 'Spark', wave: 'square',   attack: 0.002, decay: 0.18, peak: 0.22, filterFreq: 2600, hue: 40,  detune: 0 },
+  ];
+  let currentSpecies = SPECIES[0];
+
+  const paletteEl = document.getElementById('palette');
+  SPECIES.forEach(sp => {
+    const btn = document.createElement('div');
+    btn.className = 'species-btn' + (sp === currentSpecies ? ' selected' : '');
+    btn.innerHTML = `<div class="dot" style="background:hsl(${sp.hue},75%,65%)"></div><span class="label">${sp.label}</span>`;
+    btn.addEventListener('click', () => {
+      currentSpecies = sp;
+      [...paletteEl.children].forEach(c => c.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+    paletteEl.appendChild(btn);
+  });
+
+  // ---------- Audio ----------
+  let audioCtx = null;
+  let masterGain = null;
+  let started = false;
+  let tempo = 100;
+  let scaleName = 'majPent';
+  let muted = false;
+  let volume = 0.6;
+
+  function initAudio() {
+    if (started) return;
+    started = true;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = volume;
+    masterGain.connect(audioCtx.destination);
+    nextStepTime = audioCtx.currentTime + 0.05;
+    scheduler();
+  }
+
+  function playNote(seed, time) {
+    const sp = seed.species;
+    const osc = audioCtx.createOscillator();
+    osc.type = sp.wave;
+    osc.frequency.setValueAtTime(seed.freq, time);
+    if (sp.detune) osc.detune.setValueAtTime(sp.detune, time);
+
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(sp.filterFreq, time);
+    filter.Q.value = 0.6;
+
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.linearRampToValueAtTime(sp.peak, time + sp.attack);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + sp.attack + sp.decay);
+
+    osc.connect(filter).connect(gain).connect(masterGain);
+    osc.start(time);
+    osc.stop(time + sp.attack + sp.decay + 0.05);
+  }
+
+  // ---------- Scheduler (lookahead pattern) ----------
+  const stepsPerLoop = COLS;
+  let currentStep = 0;
+  let nextStepTime = 0.0;
+  const lookahead = 25.0;
+  const scheduleAheadTime = 0.12;
+  let secondsPerStep = 60.0 / tempo / 4;
+  let lastStepFiredTime = 0;
+
+  const visualEvents = []; // {col, time}
+
+  function scheduleStep(step, time) {
+    seeds.forEach(seed => {
+      if (seed.col === step) playNote(seed, time);
+    });
+    visualEvents.push({ col: step, time });
+  }
+
+  function advanceStep() {
+    secondsPerStep = 60.0 / tempo / 4;
+    nextStepTime += secondsPerStep;
+    currentStep = (currentStep + 1) % stepsPerLoop;
+  }
+
+  function scheduler() {
+    while (nextStepTime < audioCtx.currentTime + scheduleAheadTime) {
+      scheduleStep(currentStep, nextStepTime);
+      advanceStep();
+    }
+    setTimeout(scheduler, lookahead);
+  }
+
+  // ---------- Seeds ----------
+  let seeds = [];
+
+  function cellSize() {
+    return { cw: W / COLS, ch: H / ROWS };
+  }
+
+  function colRowFromXY(x, y) {
+    const { cw, ch } = cellSize();
+    return {
+      col: Math.max(0, Math.min(COLS - 1, Math.floor(x / cw))),
+      row: Math.max(0, Math.min(ROWS - 1, Math.floor(y / ch))),
+    };
+  }
+
+  function seedAt(col, row) {
+    return seeds.find(s => s.col === col && s.row === row);
+  }
+
+  function plantSeed(col, row) {
+    const rowFromBottom = ROWS - 1 - row;
+    const freq = noteFreq(rowFromBottom, scaleName);
+    seeds.push({
+      col, row, freq,
+      species: currentSpecies,
+      plantedAt: performance.now(),
+      bloomAt: -1,
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+
+  function removeSeed(col, row) {
+    seeds = seeds.filter(s => !(s.col === col && s.row === row));
+  }
+
+  function recomputeFrequencies() {
+    seeds.forEach(s => {
+      const rowFromBottom = ROWS - 1 - s.row;
+      s.freq = noteFreq(rowFromBottom, scaleName);
+    });
+  }
+
+  // ---------- Pointer interaction ----------
+  let hoverCell = null;
+
+  function handlePointer(e) {
+    initAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX ?? e.touches?.[0]?.clientX) - rect.left;
+    const y = (e.clientY ?? e.touches?.[0]?.clientY) - rect.top;
+    const { col, row } = colRowFromXY(x, y);
+    const existing = seedAt(col, row);
+    if (existing) {
+      removeSeed(col, row);
+    } else {
+      plantSeed(col, row);
+    }
+    hideHint();
+  }
+
+  canvas.addEventListener('pointerdown', handlePointer);
+  canvas.addEventListener('pointermove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    hoverCell = colRowFromXY(x, y);
+  });
+  canvas.addEventListener('pointerleave', () => { hoverCell = null; });
+
+  // ---------- Hint ----------
+  const hintEl = document.getElementById('hint');
+  let hintHidden = false;
+  function hideHint() {
+    if (hintHidden) return;
+    hintHidden = true;
+    hintEl.style.opacity = '0';
+  }
+  document.getElementById('helpBtn').addEventListener('click', () => {
+    hintHidden = false;
+    hintEl.style.opacity = '1';
+  });
+
+  // ---------- Controls ----------
+  const tempoSlider = document.getElementById('tempo');
+  const tempoVal = document.getElementById('tempoVal');
+  tempoSlider.addEventListener('input', () => {
+    tempo = parseInt(tempoSlider.value, 10);
+    tempoVal.textContent = tempo;
+  });
+
+  const scaleSelect = document.getElementById('scale');
+  scaleSelect.addEventListener('change', () => {
+    scaleName = scaleSelect.value;
+    recomputeFrequencies();
+  });
+
+  const volumeSlider = document.getElementById('volume');
+  volumeSlider.addEventListener('input', () => {
+    volume = parseFloat(volumeSlider.value);
+    if (masterGain && !muted) masterGain.gain.value = volume;
+  });
+
+  const muteBtn = document.getElementById('muteBtn');
+  muteBtn.addEventListener('click', () => {
+    muted = !muted;
+    muteBtn.classList.toggle('active', muted);
+    muteBtn.textContent = muted ? 'Unmute' : 'Mute';
+    if (masterGain) masterGain.gain.value = muted ? 0 : volume;
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    seeds = [];
+  });
+
+  // ---------- Background fireflies ----------
+  const fireflies = Array.from({ length: 24 }, () => ({
+    x: Math.random(),
+    y: Math.random(),
+    r: 0.6 + Math.random() * 1.4,
+    speed: 0.02 + Math.random() * 0.03,
+    phase: Math.random() * Math.PI * 2,
+  }));
+
+  // ---------- Render loop ----------
+  function draw() {
+    requestAnimationFrame(draw);
+    const now = performance.now();
+    const audioNow = audioCtx ? audioCtx.currentTime : 0;
+
+    // background
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#0b1220');
+    grad.addColorStop(1, '#061018');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // fireflies
+    fireflies.forEach(f => {
+      const fx = f.x * W + Math.sin(now * 0.0003 + f.phase) * 20;
+      const fy = f.y * H + Math.cos(now * 0.0002 + f.phase) * 20;
+      const flicker = 0.3 + 0.3 * Math.sin(now * 0.002 + f.phase * 3);
+      ctx.beginPath();
+      ctx.arc(fx, fy, f.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(126, 232, 201, ${flicker * 0.5})`;
+      ctx.fill();
+    });
+
+    const { cw, ch } = cellSize();
+
+    // grid guide lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    for (let c = 0; c <= COLS; c++) {
+      ctx.beginPath();
+      ctx.moveTo(c * cw, 0);
+      ctx.lineTo(c * cw, H);
+      ctx.stroke();
+    }
+
+    // process visual events -> trigger blooms
+    for (let i = visualEvents.length - 1; i >= 0; i--) {
+      const ev = visualEvents[i];
+      if (ev.time <= audioNow) {
+        seeds.forEach(s => {
+          if (s.col === ev.col) s.bloomAt = now;
+        });
+        visualEvents.splice(i, 1);
+      }
+    }
+
+    // playhead sweep
+    if (started) {
+      const progress = Math.min(1, Math.max(0, (audioNow - (nextStepTime - secondsPerStep)) / secondsPerStep));
+      const playCol = ((currentStep - 1 + COLS) % COLS) + progress;
+      const px = playCol * cw;
+      const playGrad = ctx.createLinearGradient(px - cw * 0.5, 0, px + cw * 0.5, 0);
+      playGrad.addColorStop(0, 'rgba(126,232,201,0)');
+      playGrad.addColorStop(0.5, 'rgba(126,232,201,0.10)');
+      playGrad.addColorStop(1, 'rgba(126,232,201,0)');
+      ctx.fillStyle = playGrad;
+      ctx.fillRect(px - cw * 0.5, 0, cw, H);
+    }
+
+    // hover ghost
+    if (hoverCell && !seedAt(hoverCell.col, hoverCell.row)) {
+      const cx = hoverCell.col * cw + cw / 2;
+      const cy = hoverCell.row * ch + ch / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.min(cw, ch) * 0.18, 0, Math.PI * 2);
+      ctx.strokeStyle = `hsla(${currentSpecies.hue},70%,70%,0.5)`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // seeds
+    seeds.forEach(s => {
+      const cx = s.col * cw + cw / 2;
+      const cy = s.row * ch + ch / 2;
+      const age = now - s.plantedAt;
+      const growth = Math.min(1, age / 500);
+      const growEase = 1 - Math.pow(1 - growth, 3);
+
+      const sway = Math.sin(now * 0.0015 + s.phase) * 2;
+
+      let bloomT = 1;
+      if (s.bloomAt >= 0) {
+        const bAge = now - s.bloomAt;
+        bloomT = Math.min(1, bAge / 400);
+      }
+      const bloomEase = 1 - Math.pow(1 - bloomT, 2);
+      const pulse = (1 - bloomEase) * 0.9;
+
+      const baseR = Math.min(cw, ch) * 0.16 * growEase;
+      const r = baseR * (1 + pulse * 0.9);
+
+      // stem
+      ctx.strokeStyle = `hsla(${s.species.hue}, 40%, 55%, ${0.35 * growEase})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + sway * 0.3, Math.min(H, cy + ch * 0.45));
+      ctx.lineTo(cx + sway, cy);
+      ctx.stroke();
+
+      // glow ring on bloom
+      if (pulse > 0.02) {
+        ctx.beginPath();
+        ctx.arc(cx + sway, cy, r * 1.9, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${s.species.hue}, 85%, 70%, ${pulse * 0.25})`;
+        ctx.fill();
+      }
+
+      // petals
+      const petals = 5;
+      for (let i = 0; i < petals; i++) {
+        const ang = (i / petals) * Math.PI * 2 + s.phase;
+        const px = cx + sway + Math.cos(ang) * r * 0.9;
+        const py = cy + Math.sin(ang) * r * 0.9;
+        ctx.beginPath();
+        ctx.arc(px, py, r * 0.55, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${s.species.hue}, 80%, ${65 + pulse * 15}%, ${0.55 + pulse * 0.35})`;
+        ctx.fill();
+      }
+      // center
+      ctx.beginPath();
+      ctx.arc(cx + sway, cy, r * 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${s.species.hue - 20}, 90%, 80%, 0.9)`;
+      ctx.fill();
+    });
+  }
+
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
